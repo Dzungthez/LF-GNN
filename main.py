@@ -268,7 +268,7 @@ if __name__ == '__main__':
 
     optimizer = optim.Adam(model.parameters(), lr=1e-5)
     scheduler = None
-    num_epochs = 10
+    num_epochs = 12
     checkpoint_dir = 'checkpoints'
     # train_subset = [next(iter(train_loader)) for _ in range(200)]
 
