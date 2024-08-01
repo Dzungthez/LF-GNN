@@ -1,10 +1,10 @@
 argparse
-torch
 transformers
 datasets
 scikit-learn
 numpy
 pandas
 torch-geometric
+torch
 tqdm
 kaggle

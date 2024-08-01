@@ -1,5 +1,4 @@
 import logging
-
 import argparse
 import json
 import os
@@ -34,7 +33,7 @@ file_weight_matrix = "data/gcn_input/lawyers/weight_matrix_lids_1.csv"
 file_matrix_path = "data/gcn_input/lawyers/adjacency_matrix_lids_1.csv"
 case_meta_path = 'data/gcn_input/case_meta'
 
-input_path = "data/longformer_data/input"
+input_path = "data/longformer_data/input_longformer"
 labels_path = "data/longformer_data/full_data_labels_test.json"
 
 training = True
@@ -92,7 +91,6 @@ def evaluate(model, dataloader, device):
             labels = batch['labels'].to(device)
             node1_embeddings = batch['node1'].to(device)
             node2_embeddings = batch['node2'].to(device)
-            labels = batch['labels']
             logits, loss = model(input_ids=input_ids, attention_mask=attention_mask, 
                     node1_embeddings=node1_embeddings, node2_embeddings=node2_embeddings, labels=labels)
 
@@ -106,6 +104,8 @@ def evaluate(model, dataloader, device):
     return compute_metrics2((all_preds, all_labels)), all_preds
 
 def save_checkpoint(model, optimizer, scheduler, epoch, file_path):
+    # Ensure the directory exists
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
     state = {
         'epoch': epoch,
         'model_state_dict': model.state_dict(),
@@ -125,7 +125,7 @@ def load_checkpoint(file_path, model, optimizer, scheduler=None):
     print(f"Checkpoint loaded from {file_path}, starting from epoch {start_epoch}")
     return start_epoch
 
-def gcn_training():
+def gcn_training(num_nodes, edge_index, edge_attr):
     model = GCNAutoencoder(in_channels=num_nodes, hidden_channels=16, out_channels=out_channels)
 
     x = torch.eye(num_nodes)
@@ -149,26 +149,26 @@ def gcn_training():
         loss.backward()
         optimizer.step()
         
-        print(f'Epoch {epoch}, Loss: {loss.item()}')
+        # print(f'Epoch {epoch}, Loss: {loss.item()}')
 
         with torch.no_grad():
             output, embs = model(x, edge_index)
     return embs
 
 def get_latest_checkpoint(directory):
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+        return None
     files = [f for f in os.listdir(directory) if f.endswith('.pth')]
     if not files:
         return None
     latest_file = max(files, key=lambda x: int(x.split('_')[-1].split('.')[0]))
     return os.path.join(directory, latest_file)
 
-def training():
-    optimizer = optim.Adam(model.parameters(), lr=1e-5)
-    scheduler = None
-    preds = []
-    num_epochs = 10
+def training(model, optimizer, scheduler, train_loader, val_loader, num_epochs, device, training, load_from_checkpoint, checkpoint_dir):
+    # Ensure the checkpoint directory exists
+    os.makedirs(checkpoint_dir, exist_ok=True)
     start_epoch = 0
-    checkpoint_dir = 'checkpoints'
     latest_checkpoint = get_latest_checkpoint(checkpoint_dir)
     
     if load_from_checkpoint and latest_checkpoint:
@@ -191,7 +191,6 @@ def training():
                 labels = batch['labels'].to(device)
                 node1_embeddings = batch['node1'].to(device)
                 node2_embeddings = batch['node2'].to(device)
-                labels = batch['labels']
                 logits, loss = model(input_ids=input_ids, attention_mask=attention_mask, 
                         node1_embeddings=node1_embeddings, node2_embeddings=node2_embeddings, labels=labels)
                 
@@ -204,11 +203,14 @@ def training():
             avg_loss = total_loss / len(train_loader)
             print(f'Epoch {epoch + 1}/{num_epochs}, Loss: {avg_loss}')
             
-            checkpoint_path = f'checkpoints/checkpoint_epoch_{epoch + 1}.pth'
+            checkpoint_path = f'{checkpoint_dir}/checkpoint_epoch_{epoch + 1}.pth'
             save_checkpoint(model, optimizer, scheduler, epoch + 1, checkpoint_path)
             
             val_metrics, preds = evaluate(model, val_loader, device)
             print(f'Validation metrics: {val_metrics}')
+            
+            # Ensure the logs directory exists
+            os.makedirs('logs', exist_ok=True)
             with open(f'logs/metrics_gcn_lf_att_epoch{epoch+1}.json', 'w') as f:
                 json.dump(val_metrics, f)
             model.train()
@@ -246,7 +248,7 @@ if __name__ == '__main__':
     num_nodes = adj_matrix.shape[0]
 
     out_channels = 128
-    gcn_embs = gcn_training()
+    gcn_embs = gcn_training(num_nodes, edge_index, edge_attr)
 
     train_df, val_df = create_train_val_dataframe(input_path, labels_path)
     train_dataset = ColieeDataset(train_df, max_len=4096, lawyer_idx_to_embs=gcn_embs, lawyer_to_idx= map_case,
@@ -264,4 +266,10 @@ if __name__ == '__main__':
 
     model = model.to(device)
 
-    training()
+    optimizer = optim.Adam(model.parameters(), lr=1e-5)
+    scheduler = None
+    num_epochs = 10
+    checkpoint_dir = 'checkpoints'
+    # train_subset = [next(iter(train_loader)) for _ in range(200)]
+
+    training(model, optimizer, scheduler, train_loader, val_loader, num_epochs, device, training, load_from_checkpoint, checkpoint_dir)
