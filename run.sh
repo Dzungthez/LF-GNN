@@ -1,5 +1,5 @@
 #!/bin/bash
-# source activate myenv
+
 # Default parameters
 INPUT_PATH="data/longformer_data/input_longformer"
 LABELS_PATH="data/longformer_data/full_data_labels_test.json"
@@ -10,11 +10,11 @@ BATCH_SIZE=2
 LR=1e-5
 NUM_EPOCHS=12
 CHECKPOINT_DIR="checkpoints"
-LOAD_FROM_CHECKPOINT=true
+LOAD_FROM_CHECKPOINT=false
 TRAINING=true
 
 # Run the Python script with the default parameters
-python3 main.py \
+python main.py \
   --input_path $INPUT_PATH \
   --labels_path $LABELS_PATH \
   --file_weight_matrix $FILE_WEIGHT_MATRIX \

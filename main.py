@@ -8,6 +8,7 @@ import torch.optim as optim
 import numpy as np
 import pandas as pd
 from torch_geometric.utils import to_dense_adj
+import torch.nn as nn
 from tqdm import tqdm
 from sklearn.metrics import accuracy_score
 from dataset import ColieeDataset, create_train_val_dataframe
@@ -25,7 +26,12 @@ from utils import (
 
 logging.getLogger("transformers.tokenization_utils_base").setLevel(logging.ERROR)
 
-def training(model, optimizer, scheduler, train_loader, val_loader, num_epochs, device, training, load_from_checkpoint, checkpoint_dir):
+def setup_device():
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    n_gpu = torch.cuda.device_count()
+    return device, n_gpu
+
+def training(model, optimizer, scheduler, train_loader, val_loader, num_epochs, device, n_gpu, training, load_from_checkpoint, checkpoint_dir):
     os.makedirs(checkpoint_dir, exist_ok=True)
     start_epoch = 0
     latest_checkpoint = get_latest_checkpoint(checkpoint_dir)
@@ -37,6 +43,11 @@ def training(model, optimizer, scheduler, train_loader, val_loader, num_epochs, 
             print(f"Checkpoint file {latest_checkpoint} not found. Starting from scratch.")
     
     if training:
+        if n_gpu > 1:
+            model = nn.DataParallel(model)
+        
+        model.to(device)
+
         for epoch in range(start_epoch, num_epochs + start_epoch):
             model.train()
             total_loss = 0
@@ -50,9 +61,13 @@ def training(model, optimizer, scheduler, train_loader, val_loader, num_epochs, 
                 labels = batch['labels'].to(device)
                 node1_embeddings = batch['node1'].to(device)
                 node2_embeddings = batch['node2'].to(device)
-                logits, loss = model(input_ids=input_ids, attention_mask=attention_mask, 
-                        node1_embeddings=node1_embeddings, node2_embeddings=node2_embeddings, labels=labels)
                 
+                logits, loss = model(input_ids=input_ids, attention_mask=attention_mask, 
+                                     node1_embeddings=node1_embeddings, node2_embeddings=node2_embeddings, labels=labels)
+                
+                # Ensure the loss is averaged over the batch
+                loss = loss.mean()
+
                 loss.backward()
                 optimizer.step()
                 
@@ -79,6 +94,7 @@ def training(model, optimizer, scheduler, train_loader, val_loader, num_epochs, 
         print(f'Validation metrics: {val_metrics}')
 
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train Longformer with GCN embeddings')
     parser.add_argument('--input_path', type=str, default="data/longformer_data/input_longformer", help='Path to input data')
@@ -94,7 +110,8 @@ if __name__ == '__main__':
     parser.add_argument('--training', action='store_true', help='Enable training')
     args = parser.parse_args()
 
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device, n_gpu = setup_device()
+    print(f'Number of GPUs: {n_gpu}')
 
     adj_matrix = pd.read_csv(args.file_matrix_path)
     weight_matrix = pd.read_csv(args.file_weight_matrix)
@@ -143,4 +160,4 @@ if __name__ == '__main__':
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     scheduler = None
 
-    training(model, optimizer, scheduler, train_loader, val_loader, args.num_epochs, device, args.training, args.load_from_checkpoint, args.checkpoint_dir)
+    training(model, optimizer, scheduler, train_loader, val_loader, args.num_epochs, device, n_gpu, args.training, args.load_from_checkpoint, args.checkpoint_dir)
