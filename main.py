@@ -31,6 +31,12 @@ def setup_device():
     n_gpu = torch.cuda.device_count()
     return device, n_gpu
 
+def download_and_extract_dataset():
+    import kaggle
+    import zipfile
+
+    kaggle.api.dataset_download_files('nhddddz84/lf-gcn-data', path='/app/data', unzip=True)
+
 def training(model, optimizer, scheduler, train_loader, val_loader, num_epochs, device, n_gpu, training, load_from_checkpoint, checkpoint_dir):
     os.makedirs(checkpoint_dir, exist_ok=True)
     start_epoch = 0
@@ -94,7 +100,6 @@ def training(model, optimizer, scheduler, train_loader, val_loader, num_epochs, 
         print(f'Validation metrics: {val_metrics}')
 
 
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train Longformer with GCN embeddings')
     parser.add_argument('--input_path', type=str, default="data/longformer_data/input_longformer", help='Path to input data')
@@ -108,10 +113,13 @@ if __name__ == '__main__':
     parser.add_argument('--checkpoint_dir', type=str, default='checkpoints', help='Directory for saving checkpoints')
     parser.add_argument('--load_from_checkpoint', action='store_true', help='Load from checkpoint')
     parser.add_argument('--training', action='store_true', help='Enable training')
+    parser.add_argument('--download_dataset', action='store_true', help='Download dataset from Kaggle')
     args = parser.parse_args()
 
     device, n_gpu = setup_device()
-    print(f'Number of GPUs: {n_gpu}')
+
+    if args.download_dataset:
+        download_and_extract_dataset()
 
     adj_matrix = pd.read_csv(args.file_matrix_path)
     weight_matrix = pd.read_csv(args.file_weight_matrix)

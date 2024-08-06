@@ -6,12 +6,13 @@ LABELS_PATH="data/longformer_data/full_data_labels_test.json"
 FILE_WEIGHT_MATRIX="data/gcn_input/lawyers/weight_matrix_lids_1.csv"
 FILE_MATRIX_PATH="data/gcn_input/lawyers/adjacency_matrix_lids_1.csv"
 CASE_META_PATH="data/gcn_input/case_meta"
-BATCH_SIZE=2
+BATCH_SIZE=4
 LR=1e-5
 NUM_EPOCHS=12
 CHECKPOINT_DIR="checkpoints"
 LOAD_FROM_CHECKPOINT=false
 TRAINING=true
+DOWNLOAD_DATASET=false
 
 # Run the Python script with the default parameters
 python main.py \
@@ -25,4 +26,5 @@ python main.py \
   --num_epochs $NUM_EPOCHS \
   --checkpoint_dir $CHECKPOINT_DIR \
   $(if $LOAD_FROM_CHECKPOINT; then echo "--load_from_checkpoint"; fi) \
-  $(if $TRAINING; then echo "--training"; fi)
+  $(if $TRAINING; then echo "--training"; fi) \
+  $(if $DOWNLOAD_DATASET; then echo "--download_dataset"; fi)
