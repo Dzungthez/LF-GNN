@@ -5,25 +5,17 @@ import pandas as pd
 from transformers import LongformerTokenizer
 import torch
 from torch.utils.data import Dataset
-list_skipped_words = ['should', 'did', 'must', 'just', '.', '..','...', 
-                      'the', 'a', 'an', 'in', 'on', 'at', 'to', 'of', 'for', 
-                      'with', 'by', 'and', 'or', 'but', 'so', 'nor', 'yet', 
-                      'from', 'into', 'onto', 'upon', 'out', 'off', 'over', 
-                      'under', 'below', 'above', 'between', 'among', 'through', 
-                      'during', 'before', 'after', 'since', 'until', 'while', 
+
+list_skipped_words = ['should', 'did', 'must', 'just', '.', '..', '...',
+                      'the', 'a', 'an', 'in', 'on', 'at', 'to', 'of', 'for',
+                      'with', 'by', 'and', 'or', 'but', 'so', 'nor', 'yet',
+                      'from', 'into', 'onto', 'upon', 'out', 'off', 'over',
+                      'under', 'below', 'above', 'between', 'among', 'through',
+                      'during', 'before', 'after', 'since', 'until', 'while',
                       'as', 'like', 'about', 'against', 'among', 'around']
 
 
 def load_fulltext_raw_dir(input_path):
-    """
-    Load full text of case law from raw data folder.
-
-    Each file contains two key 'paragraphs' and 'meta', containing a list of all paragraphs.
-    Our aim is to merge all paragraphs to load the full text of case law.
-
-    return: dictionary of case law with key as case_id, value as full text of case law.
-    """
-
     case_law = {}
     for filename in os.listdir(input_path):
         if filename.endswith(".json"):
@@ -45,22 +37,12 @@ def load_fulltext_raw_dir(input_path):
     return case_law
 
 def filter_useless_words(fulltext):
-    """
-    remove useless words, give a str that contains full text of a single case law
-
-    return: result string
-    """
     words = fulltext.split()
     filtered_words = [word for word in words if word.lower() not in list_skipped_words]
     return ' '.join(filtered_words)
 
 
-def create_train_val_dataframe(input_path, labels_path, filter = False):
-    """
-    Split case law into training and validation set
-    input_path: path to the input_data_folder
-    return: train_df, val_df
-    """
+def create_train_val_dataframe(input_path, labels_path, filter=False):
     case_law = load_fulltext_raw_dir(input_path)
     if filter:
         for key, value in case_law.items():
@@ -75,8 +57,8 @@ def create_train_val_dataframe(input_path, labels_path, filter = False):
                 examples.append({
                     'text1': case_law[case_id],
                     'text2': case_law[nested_case_id],
-                    'text1_id' : case_id,
-                    'text2_id' : nested_case_id,
+                    'text1_id': case_id,
+                    'text2_id': nested_case_id,
                     'label': _label})
 
     train_examples, val_examples = train_test_split(examples, test_size=0.2, random_state=42)
@@ -121,15 +103,15 @@ class ColieeDataset(Dataset):
     def tokenize_text_pair(self, item):
         try:
             inputs = self.tokenizer(
-                item['text1'], item['text2'], 
-                padding='max_length', 
-                truncation='longest_first', 
-                max_length=self.max_len, 
+                item['text1'], item['text2'],
+                padding='max_length',
+                truncation='longest_first',
+                max_length=self.max_len,
                 return_tensors='pt'
             )
             inputs = {key: val.squeeze(0).to(self.device) for key, val in inputs.items()}
             inputs['labels'] = torch.tensor(item['label']).to(self.device)
-            
+
             node1 = self.get_node_embeddings(item['text1_id'])
             node2 = self.get_node_embeddings(item['text2_id'])
             inputs['node1'] = node1
@@ -141,15 +123,19 @@ class ColieeDataset(Dataset):
 
     def get_node_embeddings(self, case_id: str):
         try:
+            max_lawyers = 6
             if case_id not in self.case_lawyer_mapping:
-                return torch.zeros((128, 1)).to(self.device)
+                return torch.zeros((128, max_lawyers)).to(self.device)
             lawyer_ids = self.case_lawyer_mapping[case_id]
             lawyer_embeddings = [self.lawyer_idx_to_embs[self.lawyer_to_idx[lawyer]].unsqueeze(1) for lawyer in lawyer_ids]
             if not lawyer_embeddings:
-                return torch.zeros((128, 1)).to(self.device) 
+                return torch.zeros((128, max_lawyers)).to(self.device)
             ans = torch.cat(lawyer_embeddings, dim=1)
+            if ans.size(1) < max_lawyers:
+                padding = torch.zeros((128, max_lawyers - ans.size(1))).to(self.device)
+                ans = torch.cat((ans, padding), dim=1)
+            elif ans.size(1) > max_lawyers:
+                ans = ans[:, :max_lawyers]
             return ans.to(self.device)
         except Exception as e:
-            return torch.zeros((128, 1)).to(self.device)
-
-
+            return torch.zeros((128, max_lawyers)).to(self.device)

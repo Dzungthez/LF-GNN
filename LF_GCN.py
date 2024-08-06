@@ -10,10 +10,10 @@ class LongformerWithNodeEmbeddings(nn.Module):
         self.num_heads = num_heads
         self.head_dim = 64
 
-        self.W_q = nn.Linear(node_embedding_dim, self.num_heads * self.head_dim) # 128, 4 * 64
+        self.W_q = nn.Linear(node_embedding_dim, self.num_heads * self.head_dim)
         self.W_k = nn.Linear(node_embedding_dim, self.num_heads * self.head_dim)
         self.W_v = nn.Linear(node_embedding_dim, self.num_heads * self.head_dim)
-        self.W_o = nn.Linear(self.head_dim * self.num_heads, self.head_dim) # 256, 64
+        self.W_o = nn.Linear(self.head_dim * self.num_heads, self.head_dim)
 
         self.layer_norm = nn.LayerNorm(longformer_model.config.hidden_size + self.head_dim)
 
@@ -34,23 +34,22 @@ class LongformerWithNodeEmbeddings(nn.Module):
         sequence_output = outputs[0]
         pooled_output = sequence_output[:, 0, :]
 
-        # Transpose the last two dimensions
-        node1_embeddings = node1_embeddings.permute(0, 2, 1)  # Shape [B, 128, N]
-        node2_embeddings = node2_embeddings.permute(0, 2, 1)  # Shape [B, 128, M]
+        node1_embeddings = node1_embeddings.permute(0, 2, 1)
+        node2_embeddings = node2_embeddings.permute(0, 2, 1)
 
-        extra_lawyer = pooled_output[:, :128].unsqueeze(1)  # Shape [B, 1, 128]
+        extra_lawyer = pooled_output[:, :128].unsqueeze(1)
 
-        node2_embeddings = torch.cat([node2_embeddings, extra_lawyer], dim=1)  # Shape [B, 128, M+1]
+        node2_embeddings = torch.cat([node2_embeddings, extra_lawyer], dim=1)
 
         batch_size = node1_embeddings.size(0)
 
-        node1_q = self.W_q(node1_embeddings).view(batch_size, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)  # Shape [B, 4, N, 64]
-        node1_k = self.W_k(node1_embeddings).view(batch_size, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)  # Shape [B, 4, N, 64]
-        node1_v = self.W_v(node1_embeddings).view(batch_size, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)  # Shape [B, 4, N, 64]
+        node1_q = self.W_q(node1_embeddings).view(batch_size, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+        node1_k = self.W_k(node1_embeddings).view(batch_size, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+        node1_v = self.W_v(node1_embeddings).view(batch_size, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
 
-        node2_q = self.W_q(node2_embeddings).view(batch_size, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)  # Shape [B, 4, M+1, 64]
-        node2_k = self.W_k(node2_embeddings).view(batch_size, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)  # Shape [B, 4, M+1, 64]
-        node2_v = self.W_v(node2_embeddings).view(batch_size, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)  # Shape [B, 4, M+1, 64]
+        node2_q = self.W_q(node2_embeddings).view(batch_size, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+        node2_k = self.W_k(node2_embeddings).view(batch_size, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+        node2_v = self.W_v(node2_embeddings).view(batch_size, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
 
         attention_scores = torch.einsum('bhid,bhjd->bhij', node1_q, node2_k) / (self.head_dim ** 0.5)
         attention_probs = F.softmax(attention_scores, dim=-1)

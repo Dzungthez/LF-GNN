@@ -3,7 +3,6 @@ from torch_geometric.data import Data
 from torch_geometric.nn import GCNConv
 from torch.nn import functional as F
 
-from torch_geometric.utils import to_dense_adj
 class GCNEncoder(torch.nn.Module):
     def __init__(self, in_channels, hidden_channels, out_channels):
         super(GCNEncoder, self).__init__()
@@ -35,5 +34,3 @@ class GCNAutoencoder(torch.nn.Module):
         z = self.encoder(x, edge_index)
         out = self.decoder(z, edge_index)
         return out, z
-    
-
